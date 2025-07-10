@@ -358,8 +358,8 @@ const PublicSchedule = () => {
     try {
       // Fetch public schedule without authentication
       const [scheduleRes, classesRes] = await Promise.all([
-        axios.get(`${API}/schedule/public`, { headers: {} }),
-        axios.get(`${API}/classes/public`, { headers: {} })
+        publicAxios.get('/schedule/public'),
+        publicAxios.get('/classes/public')
       ]);
       setSchedule(scheduleRes.data);
       setClasses(classesRes.data);
