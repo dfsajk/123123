@@ -170,13 +170,16 @@ def approve_user_for_testing(username, results):
 def test_user_login(results):
     """Test user login scenarios"""
     
+    # Generate unique identifier for this test run
+    test_id = str(uuid.uuid4())[:8]
+    
     # First, we need to approve the admin user we created for testing
     # Since we can't approve without being logged in as admin, we'll test the pending scenario
     
     # Test 1: Login with pending user should fail
     try:
         login_data = {
-            "username": "admin_user",
+            "username": f"admin_user_{test_id}",
             "password": "SecurePass123!"
         }
         
@@ -202,7 +205,7 @@ def test_user_login(results):
     # Test 2: Login with invalid credentials should fail
     try:
         invalid_login_data = {
-            "username": "admin_user",
+            "username": f"admin_user_{test_id}",
             "password": "WrongPassword123!"
         }
         
@@ -217,7 +220,7 @@ def test_user_login(results):
     # Test 3: Login with non-existent user should fail
     try:
         nonexistent_login_data = {
-            "username": "nonexistent_user",
+            "username": f"nonexistent_user_{test_id}",
             "password": "AnyPassword123!"
         }
         
