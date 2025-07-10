@@ -6,6 +6,14 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// Create separate axios instance for public requests
+const publicAxios = axios.create({
+  baseURL: API,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
 // Authentication Context
 const AuthContext = createContext();
 
