@@ -63,11 +63,14 @@ def test_api_status(results):
 def test_user_registration(results):
     """Test user registration with various scenarios"""
     
+    # Generate unique identifiers for this test run
+    test_id = str(uuid.uuid4())[:8]
+    
     # Test 1: Valid admin registration
     try:
         admin_data = {
-            "email": "admin@school29.edu",
-            "username": "admin_user",
+            "email": f"admin_{test_id}@school29.edu",
+            "username": f"admin_user_{test_id}",
             "full_name": "School Administrator",
             "password": "SecurePass123!",
             "role": "admin"
@@ -88,8 +91,8 @@ def test_user_registration(results):
     # Test 2: Valid teacher registration
     try:
         teacher_data = {
-            "email": "teacher@school29.edu",
-            "username": "teacher_user",
+            "email": f"teacher_{test_id}@school29.edu",
+            "username": f"teacher_user_{test_id}",
             "full_name": "Math Teacher",
             "password": "TeacherPass123!",
             "role": "teacher"
@@ -106,8 +109,8 @@ def test_user_registration(results):
     # Test 3: Valid student registration
     try:
         student_data = {
-            "email": "student@school29.edu",
-            "username": "student_user",
+            "email": f"student_{test_id}@school29.edu",
+            "username": f"student_user_{test_id}",
             "full_name": "John Student",
             "password": "StudentPass123!",
             "role": "student",
@@ -125,8 +128,8 @@ def test_user_registration(results):
     # Test 4: Duplicate username should fail
     try:
         duplicate_data = {
-            "email": "different@school29.edu",
-            "username": "admin_user",  # Same username as admin
+            "email": f"different_{test_id}@school29.edu",
+            "username": f"admin_user_{test_id}",  # Same username as admin
             "full_name": "Another User",
             "password": "AnotherPass123!",
             "role": "student"
@@ -144,7 +147,7 @@ def test_user_registration(results):
     try:
         invalid_email_data = {
             "email": "invalid-email-format",
-            "username": "invalid_email_user",
+            "username": f"invalid_email_user_{test_id}",
             "full_name": "Invalid Email User",
             "password": "ValidPass123!",
             "role": "student"
