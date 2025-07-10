@@ -262,7 +262,9 @@ const PublicNews = () => {
   const fetchNews = async () => {
     try {
       // Fetch published news without authentication
-      const response = await axios.get(`${API}/news/public`);
+      const response = await axios.get(`${API}/news/public`, {
+        headers: {} // Override any default headers
+      });
       setNews(response.data);
     } catch (error) {
       console.error('Error fetching news:', error);
@@ -273,7 +275,9 @@ const PublicNews = () => {
 
   const viewNews = async (newsId) => {
     try {
-      await axios.get(`${API}/news/${newsId}/view`);
+      await axios.get(`${API}/news/${newsId}/view`, {
+        headers: {} // Override any default headers
+      });
       // Refresh news to update view count
       fetchNews();
     } catch (error) {
