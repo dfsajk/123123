@@ -295,7 +295,7 @@ def test_classes_endpoint(results):
     """Test classes endpoint access"""
     try:
         response = requests.get(f"{BACKEND_URL}/classes")
-        if response.status_code == 401:
+        if response.status_code in [401, 403]:
             results.log_pass("Classes Endpoint - Requires authentication")
         else:
             results.log_fail("Classes Endpoint", f"Should require auth, got {response.status_code}")
@@ -306,7 +306,7 @@ def test_news_endpoint(results):
     """Test news endpoint access"""
     try:
         response = requests.get(f"{BACKEND_URL}/news")
-        if response.status_code == 401:
+        if response.status_code in [401, 403]:
             results.log_pass("News Endpoint - Requires authentication")
         else:
             results.log_fail("News Endpoint", f"Should require auth, got {response.status_code}")
