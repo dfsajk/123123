@@ -605,38 +605,7 @@ async def get_analytics(current_user: User = Depends(require_role(UserRole.ADMIN
         "most_viewed_news": [News(**news) for news in most_viewed_news]
     }
 
-# Public routes (no authentication required)
-@api_router.get("/news/public", response_model=List[News])
-async def get_public_news():
-    """Get published news without authentication"""
-    news_list = await db.news.find({"status": NewsStatus.PUBLISHED}).sort("published_at", -1).to_list(100)
-    return [News(**news) for news in news_list]
 
-@api_router.get("/news/{news_id}/view")
-async def view_news_public(news_id: str):
-    """Increment view count for news (public endpoint)"""
-    result = await db.news.update_one(
-        {"id": news_id, "status": NewsStatus.PUBLISHED},
-        {"$inc": {"views": 1}}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="News not found")
-    
-    return {"message": "View counted"}
-
-@api_router.get("/schedule/public", response_model=List[Schedule])
-async def get_public_schedule():
-    """Get schedule without authentication"""
-    schedules = await db.schedules.find().to_list(1000)
-    return [Schedule(**schedule) for schedule in schedules]
-
-@api_router.get("/classes/public", response_model=List[Class])
-async def get_public_classes():
-    """Get classes without authentication"""
-    classes = await db.classes.find().to_list(1000)
-    return [Class(**class_obj) for class_obj in classes]
-
-# Include the router in the main app
 app.include_router(api_router)
 
 app.add_middleware(
