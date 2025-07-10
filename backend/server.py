@@ -287,6 +287,293 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 async def root():
     return {"message": "School29 Management System API"}
 
+# User management routes (Admin only)
+@api_router.get("/admin/pending-users", response_model=List[User])
+async def get_pending_users(current_user: User = Depends(require_role(UserRole.ADMIN))):
+    users = await db.users.find({"status": UserStatus.PENDING}).to_list(1000)
+    return [User(**user) for user in users]
+
+@api_router.post("/admin/approve-user/{user_id}")
+async def approve_user(user_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"status": UserStatus.APPROVED}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await log_user_activity(current_user.id, "approve_user", {"approved_user_id": user_id})
+    return {"message": "User approved successfully"}
+
+@api_router.post("/admin/reject-user/{user_id}")
+async def reject_user(user_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"status": UserStatus.REJECTED}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await log_user_activity(current_user.id, "reject_user", {"rejected_user_id": user_id})
+    return {"message": "User rejected successfully"}
+
+@api_router.get("/admin/users", response_model=List[User])
+async def get_all_users(current_user: User = Depends(require_role(UserRole.ADMIN))):
+    users = await db.users.find().to_list(1000)
+    return [User(**user) for user in users]
+
+# Class management routes
+@api_router.post("/classes", response_model=Class)
+async def create_class(class_data: ClassCreate, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    new_class = Class(**class_data.dict())
+    await db.classes.insert_one(new_class.dict())
+    await log_user_activity(current_user.id, "create_class", {"class_id": new_class.id})
+    return new_class
+
+@api_router.get("/classes", response_model=List[Class])
+async def get_classes(current_user: User = Depends(get_current_active_user)):
+    classes = await db.classes.find().to_list(1000)
+    return [Class(**class_obj) for class_obj in classes]
+
+@api_router.get("/classes/{class_id}", response_model=Class)
+async def get_class(class_id: str, current_user: User = Depends(get_current_active_user)):
+    class_obj = await db.classes.find_one({"id": class_id})
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return Class(**class_obj)
+
+@api_router.put("/classes/{class_id}", response_model=Class)
+async def update_class(class_id: str, class_data: ClassCreate, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.classes.update_one(
+        {"id": class_id},
+        {"$set": class_data.dict()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Class not found")
+    
+    updated_class = await db.classes.find_one({"id": class_id})
+    await log_user_activity(current_user.id, "update_class", {"class_id": class_id})
+    return Class(**updated_class)
+
+@api_router.delete("/classes/{class_id}")
+async def delete_class(class_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.classes.delete_one({"id": class_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Class not found")
+    
+    await log_user_activity(current_user.id, "delete_class", {"class_id": class_id})
+    return {"message": "Class deleted successfully"}
+
+# News management routes
+@api_router.post("/news", response_model=News)
+async def create_news(news_data: NewsCreate, current_user: User = Depends(get_current_active_user)):
+    # Admin can publish directly, others need approval
+    status = NewsStatus.PUBLISHED if current_user.role == UserRole.ADMIN else NewsStatus.PENDING
+    published_at = datetime.utcnow() if current_user.role == UserRole.ADMIN else None
+    
+    news = News(
+        title=news_data.title,
+        content=news_data.content,
+        author_id=current_user.id,
+        author_name=current_user.full_name,
+        status=status,
+        published_at=published_at
+    )
+    
+    await db.news.insert_one(news.dict())
+    await log_user_activity(current_user.id, "create_news", {"news_id": news.id})
+    return news
+
+@api_router.get("/news", response_model=List[News])
+async def get_news(current_user: User = Depends(get_current_active_user)):
+    # Show only published news for non-admin users
+    if current_user.role == UserRole.ADMIN:
+        news_list = await db.news.find().to_list(1000)
+    else:
+        news_list = await db.news.find({"status": NewsStatus.PUBLISHED}).to_list(1000)
+    
+    return [News(**news) for news in news_list]
+
+@api_router.get("/news/{news_id}", response_model=News)
+async def get_news_item(news_id: str, current_user: User = Depends(get_current_active_user)):
+    news = await db.news.find_one({"id": news_id})
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+    
+    # Increment view count
+    await db.news.update_one(
+        {"id": news_id},
+        {"$inc": {"views": 1}}
+    )
+    
+    # Log view activity
+    await log_user_activity(current_user.id, "view_news", {"news_id": news_id})
+    
+    # Update news object with incremented views
+    news["views"] += 1
+    return News(**news)
+
+@api_router.get("/admin/pending-news", response_model=List[News])
+async def get_pending_news(current_user: User = Depends(require_role(UserRole.ADMIN))):
+    news_list = await db.news.find({"status": NewsStatus.PENDING}).to_list(1000)
+    return [News(**news) for news in news_list]
+
+@api_router.post("/admin/approve-news/{news_id}")
+async def approve_news(news_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.news.update_one(
+        {"id": news_id},
+        {"$set": {"status": NewsStatus.PUBLISHED, "published_at": datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="News not found")
+    
+    await log_user_activity(current_user.id, "approve_news", {"news_id": news_id})
+    return {"message": "News approved successfully"}
+
+@api_router.post("/admin/reject-news/{news_id}")
+async def reject_news(news_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.news.update_one(
+        {"id": news_id},
+        {"$set": {"status": NewsStatus.REJECTED}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="News not found")
+    
+    await log_user_activity(current_user.id, "reject_news", {"news_id": news_id})
+    return {"message": "News rejected successfully"}
+
+# Schedule management routes
+@api_router.post("/schedule", response_model=Schedule)
+async def create_schedule(schedule_data: ScheduleCreate, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    # Get teacher name
+    teacher = await db.users.find_one({"id": schedule_data.teacher_id})
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    
+    schedule = Schedule(
+        **schedule_data.dict(),
+        teacher_name=teacher["full_name"]
+    )
+    
+    await db.schedules.insert_one(schedule.dict())
+    await log_user_activity(current_user.id, "create_schedule", {"schedule_id": schedule.id})
+    return schedule
+
+@api_router.get("/schedule", response_model=List[Schedule])
+async def get_schedules(current_user: User = Depends(get_current_active_user)):
+    schedules = await db.schedules.find().to_list(1000)
+    return [Schedule(**schedule) for schedule in schedules]
+
+@api_router.get("/schedule/class/{class_id}", response_model=List[Schedule])
+async def get_class_schedule(class_id: str, current_user: User = Depends(get_current_active_user)):
+    schedules = await db.schedules.find({"class_id": class_id}).to_list(1000)
+    return [Schedule(**schedule) for schedule in schedules]
+
+@api_router.post("/schedule/change-request", response_model=ScheduleChangeRequest)
+async def create_schedule_change_request(
+    request_data: ScheduleChangeRequestCreate,
+    current_user: User = Depends(require_role(UserRole.TEACHER))
+):
+    # Verify teacher owns the schedule
+    schedule = await db.schedules.find_one({"id": request_data.schedule_id})
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    if schedule["teacher_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your schedule")
+    
+    change_request = ScheduleChangeRequest(
+        **request_data.dict(),
+        teacher_id=current_user.id,
+        teacher_name=current_user.full_name
+    )
+    
+    await db.schedule_change_requests.insert_one(change_request.dict())
+    await log_user_activity(current_user.id, "create_schedule_change_request", {"request_id": change_request.id})
+    return change_request
+
+@api_router.get("/admin/schedule-change-requests", response_model=List[ScheduleChangeRequest])
+async def get_pending_schedule_requests(current_user: User = Depends(require_role(UserRole.ADMIN))):
+    requests = await db.schedule_change_requests.find({"status": "pending"}).to_list(1000)
+    return [ScheduleChangeRequest(**request) for request in requests]
+
+@api_router.post("/admin/approve-schedule-change/{request_id}")
+async def approve_schedule_change(request_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    request = await db.schedule_change_requests.find_one({"id": request_id})
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    # Update the schedule with requested changes
+    await db.schedules.update_one(
+        {"id": request["schedule_id"]},
+        {"$set": request["requested_changes"]}
+    )
+    
+    # Mark request as approved
+    await db.schedule_change_requests.update_one(
+        {"id": request_id},
+        {"$set": {"status": "approved", "reviewed_at": datetime.utcnow(), "reviewed_by": current_user.id}}
+    )
+    
+    await log_user_activity(current_user.id, "approve_schedule_change", {"request_id": request_id})
+    return {"message": "Schedule change approved successfully"}
+
+@api_router.post("/admin/reject-schedule-change/{request_id}")
+async def reject_schedule_change(request_id: str, current_user: User = Depends(require_role(UserRole.ADMIN))):
+    result = await db.schedule_change_requests.update_one(
+        {"id": request_id},
+        {"$set": {"status": "rejected", "reviewed_at": datetime.utcnow(), "reviewed_by": current_user.id}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    await log_user_activity(current_user.id, "reject_schedule_change", {"request_id": request_id})
+    return {"message": "Schedule change rejected successfully"}
+
+# Analytics routes
+@api_router.get("/admin/analytics")
+async def get_analytics(current_user: User = Depends(require_role(UserRole.ADMIN))):
+    # Get user statistics
+    total_users = await db.users.count_documents({})
+    pending_users = await db.users.count_documents({"status": UserStatus.PENDING})
+    approved_users = await db.users.count_documents({"status": UserStatus.APPROVED})
+    
+    # Get news statistics
+    total_news = await db.news.count_documents({})
+    published_news = await db.news.count_documents({"status": NewsStatus.PUBLISHED})
+    pending_news = await db.news.count_documents({"status": NewsStatus.PENDING})
+    
+    # Get schedule statistics
+    total_schedules = await db.schedules.count_documents({})
+    pending_schedule_requests = await db.schedule_change_requests.count_documents({"status": "pending"})
+    
+    # Get activity statistics
+    total_activities = await db.user_activities.count_documents({})
+    
+    # Get most viewed news
+    most_viewed_news = await db.news.find({"status": NewsStatus.PUBLISHED}).sort("views", -1).limit(5).to_list(5)
+    
+    return {
+        "users": {
+            "total": total_users,
+            "pending": pending_users,
+            "approved": approved_users
+        },
+        "news": {
+            "total": total_news,
+            "published": published_news,
+            "pending": pending_news
+        },
+        "schedule": {
+            "total": total_schedules,
+            "pending_requests": pending_schedule_requests
+        },
+        "activities": {
+            "total": total_activities
+        },
+        "most_viewed_news": [News(**news) for news in most_viewed_news]
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 
